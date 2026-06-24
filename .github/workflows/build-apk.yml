@@ -1,8 +1,10 @@
 name: Build Android APK
 
 on:
-  repository_dispatch:
-    types: [build-apk]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
