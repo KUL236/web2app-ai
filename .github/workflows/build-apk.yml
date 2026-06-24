@@ -44,6 +44,22 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+          - name: Setup Android SDK
+  uses: android-actions/setup-android@v3
+
+- name: Install Android SDK 34
+  run: |
+    yes | sdkmanager --licenses
+    sdkmanager \
+      "platform-tools" \
+      "platforms;android-34" \
+      "build-tools;34.0.0"
+
+- name: Verify SDK
+  run: |
+    sdkmanager --list | grep "platforms;android-34" || true
+    sdkmanager --list | grep "build-tools;34.0.0" || true
+
       # ── 4. Cache Gradle ─────────────────────────────────────────────────
       - name: Cache Gradle packages
         uses: actions/cache@v4
@@ -101,10 +117,6 @@ jobs:
 
           echo "Placeholder replacement complete."
 
-      # ── 7. Set up Android SDK ────────────────────────────────────────────
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       # ── 8. Make gradlew executable ───────────────────────────────────────
       - name: Make gradlew executable
         working-directory: android-template
@@ -143,6 +155,7 @@ jobs:
           ./gradlew assembleRelease \
             --no-daemon \
             --stacktrace \
+            --info \
             -Pandroid.injected.signing.store.file=${{ github.workspace }}/android-template/app/keystore.jks \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \

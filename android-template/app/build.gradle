@@ -6,7 +6,7 @@ plugins {
 android {
     namespace 'APP_PACKAGE'
     compileSdk 34
-
+    buildToolsVersion "34.0.0"
     defaultConfig {
         applicationId "APP_PACKAGE"
         minSdk 24
@@ -18,6 +18,10 @@ android {
 
         buildConfigField "String", "WEBSITE_URL", '"WEBSITE_URL"'
         buildConfigField "String", "APP_NAME", '"APP_NAME"'
+
+        vectorDrawables {
+            useSupportLibrary true
+        }
     }
 
     signingConfigs {
