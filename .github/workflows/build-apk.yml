@@ -12,16 +12,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    env:
+      BUILD_ID: ${{ github.run_number }}
+      APP_NAME: Web2App AI
+      PACKAGE_NAME: com.kul236.webapp
+      WEBSITE_URL: https://your-domain.com
+      ICON_COLOR: "#6366f1"
+
     steps:
       # ── 1. Notify: Building ──────────────────────────────────────────────
       - name: Notify build started
-        if: ${{ github.event.client_payload.callback_url != '' }}
+        if: ${{ github.event.client_payload.callback_url != '' && github.event.client_payload.callback_url != null }}
         run: |
           curl -s -X POST "${{ github.event.client_payload.callback_url }}" \
             -H "Content-Type: application/json" \
             -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
             -d '{
-              "build_id": "${{ github.event.client_payload.build_id }}",
+              "build_id": "${{ github.run_number }}",
               "status": "building",
               "github_run_id": "${{ github.run_id }}"
             }' || true
@@ -48,32 +55,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # ── 5. Validate payload ─────────────────────────────────────────────
-      - name: Validate build payload
+      # ── 5. Set Build Variables ──────────────────────────────────────────
+      - name: Set Build Variables
         run: |
-          BUILD_ID="${{ github.event.client_payload.build_id }}"
-          APP_NAME="${{ github.event.client_payload.app_name }}"
-          WEBSITE_URL="${{ github.event.client_payload.website_url }}"
-          PACKAGE_NAME="${{ github.event.client_payload.package_name }}"
-
-          if [ -z "$BUILD_ID" ] || [ -z "$APP_NAME" ] || [ -z "$WEBSITE_URL" ] || [ -z "$PACKAGE_NAME" ]; then
-            echo "ERROR: Missing required payload fields"
-            exit 1
-          fi
-
-          echo "Build ID: $BUILD_ID"
-          echo "App Name: $APP_NAME"
-          echo "Package:  $PACKAGE_NAME"
-          echo "URL:      $WEBSITE_URL"
+          echo "Build ID: ${{ env.BUILD_ID }}"
+          echo "App Name: ${{ env.APP_NAME }}"
+          echo "Package: ${{ env.PACKAGE_NAME }}"
+          echo "Website: ${{ env.WEBSITE_URL }}"
 
       # ── 6. Replace placeholders ─────────────────────────────────────────
       - name: Configure app placeholders
         working-directory: android-template
         env:
-          APP_NAME: ${{ github.event.client_payload.app_name }}
-          PACKAGE_NAME: ${{ github.event.client_payload.package_name }}
-          WEBSITE_URL: ${{ github.event.client_payload.website_url }}
-          ICON_COLOR: ${{ github.event.client_payload.icon_color }}
+          APP_NAME: Web2App AI
+          PACKAGE_NAME: com.kul236.webapp
+          WEBSITE_URL: https://your-domain.com
+          ICON_COLOR: "#6366f1"
         run: |
           # Sanitize inputs
           SAFE_APP_NAME=$(echo "$APP_NAME" | sed 's/[^a-zA-Z0-9 _-]//g')
@@ -124,13 +121,13 @@ jobs:
 
       # ── 10. Notify: Signing ─────────────────────────────────────────────
       - name: Notify signing started
-        if: ${{ github.event.client_payload.callback_url != '' }}
+        if: ${{ github.event.client_payload.callback_url != '' && github.event.client_payload.callback_url != null }}
         run: |
           curl -s -X POST "${{ github.event.client_payload.callback_url }}" \
             -H "Content-Type: application/json" \
             -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
             -d '{
-              "build_id": "${{ github.event.client_payload.build_id }}",
+              "build_id": "${{ env.BUILD_ID }}",
               "status": "signing",
               "github_run_id": "${{ github.run_id }}"
             }' || true
@@ -139,7 +136,6 @@ jobs:
       - name: Build release APK
         working-directory: android-template
         env:
-          KEYSTORE_PATH: app/keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -147,7 +143,7 @@ jobs:
           ./gradlew assembleRelease \
             --no-daemon \
             --stacktrace \
-            -Pandroid.injected.signing.store.file=keystore.jks \
+            -Pandroid.injected.signing.store.file=${{ github.workspace }}/android-template/app/keystore.jks \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
@@ -169,15 +165,15 @@ jobs:
 
       # ── 13. Rename APK ──────────────────────────────────────────────────
       - name: Rename APK with build info
+        working-directory: android-template
         run: |
-          BUILD_ID="${{ github.event.client_payload.build_id }}"
-          PACKAGE="${{ github.event.client_payload.package_name }}"
-          NEW_NAME="${PACKAGE}-${BUILD_ID:0:8}.apk"
           APK_DIR=$(dirname "$APK_PATH")
-          mv "android-template/$APK_PATH" "android-template/$APK_DIR/$NEW_NAME" || true
-          FINAL_APK=$(find android-template -name "*.apk" -path "*/release/*" | head -1)
-          echo "FINAL_APK=$FINAL_APK" >> $GITHUB_ENV
-          echo "Renamed to: $FINAL_APK"
+          PACKAGE="${{ env.PACKAGE_NAME }}"
+          BUILD_ID="${{ env.BUILD_ID }}"
+          NEW_NAME="${PACKAGE}-${BUILD_ID}.apk"
+          mv "$APK_PATH" "$APK_DIR/$NEW_NAME"
+          echo "FINAL_APK=android-template/$APK_DIR/$NEW_NAME" >> $GITHUB_ENV
+          echo "Renamed to: $APK_DIR/$NEW_NAME"
 
       # ── 14. Create GitHub Release ────────────────────────────────────────
       - name: Create GitHub Release
@@ -186,15 +182,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: build-${{ github.event.client_payload.build_id }}
-          release_name: "${{ github.event.client_payload.app_name }} - Build ${{ github.event.client_payload.build_id }}"
+          tag_name: build-${{ env.BUILD_ID }}
+          release_name: "${{ env.APP_NAME }} - Build ${{ env.BUILD_ID }}"
           body: |
-            ## ${{ github.event.client_payload.app_name }}
+            ## ${{ env.APP_NAME }}
 
-            **Build ID:** `${{ github.event.client_payload.build_id }}`
-            **Package:** `${{ github.event.client_payload.package_name }}`
-            **Website:** ${{ github.event.client_payload.website_url }}
-            **Build Date:** ${{ github.run_id }}
+            **Build ID:** `${{ env.BUILD_ID }}`
+            **Package:** `${{ env.PACKAGE_NAME }}`
+            **Website:** ${{ env.WEBSITE_URL }}
+            **Run ID:** ${{ github.run_id }}
 
             ### Install Instructions
             1. Download the APK file below
@@ -212,19 +208,19 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ${{ env.FINAL_APK }}
-          asset_name: "${{ github.event.client_payload.package_name }}.apk"
+          asset_name: "${{ env.PACKAGE_NAME }}.apk"
           asset_content_type: application/vnd.android.package-archive
 
       # ── 16. Notify: Complete ────────────────────────────────────────────
       - name: Notify build complete
-        if: success()
+        if: success() && github.event.client_payload.callback_url != '' && github.event.client_payload.callback_url != null
         run: |
           DOWNLOAD_URL="${{ steps.upload_apk.outputs.browser_download_url }}"
           curl -s -X POST "${{ github.event.client_payload.callback_url }}" \
             -H "Content-Type: application/json" \
             -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
             -d "{
-              \"build_id\": \"${{ github.event.client_payload.build_id }}\",
+              \"build_id\": \"${{ env.BUILD_ID }}\",
               \"status\": \"complete\",
               \"github_run_id\": \"${{ github.run_id }}\",
               \"download_url\": \"$DOWNLOAD_URL\",
@@ -233,13 +229,13 @@ jobs:
 
       # ── 17. Notify: Failed ──────────────────────────────────────────────
       - name: Notify build failed
-        if: failure()
+        if: failure() && github.event.client_payload.callback_url != '' && github.event.client_payload.callback_url != null
         run: |
           curl -s -X POST "${{ github.event.client_payload.callback_url }}" \
             -H "Content-Type: application/json" \
             -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
             -d '{
-              "build_id": "${{ github.event.client_payload.build_id }}",
+              "build_id": "${{ env.BUILD_ID }}",
               "status": "failed",
               "github_run_id": "${{ github.run_id }}",
               "error_message": "GitHub Actions build failed. Check the workflow logs for details."
@@ -257,6 +253,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: apk-${{ github.event.client_payload.build_id }}
+          name: apk-${{ env.BUILD_ID }}
           path: "**/*.apk"
           retention-days: 7
