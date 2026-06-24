@@ -1,0 +1,214 @@
+const { createClient } = require('@supabase/supabase-js')
+
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const githubToken = process.env.GITHUB_TOKEN
+const githubOwner = process.env.GITHUB_OWNER
+const githubRepo = process.env.GITHUB_REPO
+const internalSecret = process.env.INTERNAL_SECRET
+
+exports.handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
+  }
+
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Content-Type': 'application/json',
+  }
+
+  // Preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' }
+  }
+
+  try {
+    // 1. Authenticate user via Supabase JWT
+    const authHeader = event.headers.authorization || event.headers.Authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) }
+    }
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+    if (authError || !user) {
+      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid token' }) }
+    }
+
+    // 2. Parse and validate body
+    let body
+    try {
+      body = JSON.parse(event.body)
+    } catch {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }
+    }
+
+    const { app_name, website_url, package_name, icon_color } = body
+
+    if (!app_name || !website_url || !package_name) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Missing required fields: app_name, website_url, package_name' }),
+      }
+    }
+
+    // Validate URL
+    try {
+      const url = new URL(website_url)
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error()
+    } catch {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid website URL' }) }
+    }
+
+    // Validate package name
+    if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(package_name)) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid package name format' }) }
+    }
+
+    // 3. Check package name uniqueness
+    const { data: existing } = await supabase
+      .from('apps')
+      .select('id')
+      .eq('package_name', package_name)
+      .single()
+
+    if (existing) {
+      return { statusCode: 409, headers, body: JSON.stringify({ error: 'Package name already in use. Choose another.' }) }
+    }
+
+    // 4. Check build quota (free plan: 3 builds/month)
+    const startOfMonth = new Date()
+    startOfMonth.setDate(1)
+    startOfMonth.setHours(0, 0, 0, 0)
+
+    const { count: monthlyBuilds } = await supabase
+      .from('builds')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', startOfMonth.toISOString())
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('plan')
+      .eq('id', user.id)
+      .single()
+
+    const quotas = { free: 3, pro: 25, agency: 999 }
+    const userPlan = profile?.plan || 'free'
+    const quota = quotas[userPlan] || 3
+
+    if (monthlyBuilds >= quota) {
+      return {
+        statusCode: 429,
+        headers,
+        body: JSON.stringify({ error: `Monthly build limit (${quota}) reached. Upgrade your plan.` }),
+      }
+    }
+
+    // 5. Insert app record
+    const { data: app, error: appError } = await supabase
+      .from('apps')
+      .insert({
+        user_id: user.id,
+        app_name: app_name.trim(),
+        website_url: website_url.trim(),
+        package_name: package_name.trim(),
+        icon_color: icon_color || '#6366f1',
+      })
+      .select()
+      .single()
+
+    if (appError) {
+      console.error('App insert error:', appError)
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to create app record' }) }
+    }
+
+    // 6. Insert build record
+    const { data: build, error: buildError } = await supabase
+      .from('builds')
+      .insert({
+        app_id: app.id,
+        user_id: user.id,
+        status: 'queued',
+        started_at: new Date().toISOString(),
+      })
+      .select()
+      .single()
+
+    if (buildError) {
+      console.error('Build insert error:', buildError)
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to create build record' }) }
+    }
+
+    // 7. Trigger GitHub Actions via repository_dispatch
+    const dispatchPayload = {
+      event_type: 'build-apk',
+      client_payload: {
+        build_id: build.id,
+        app_id: app.id,
+        user_id: user.id,
+        app_name: app_name.trim(),
+        website_url: website_url.trim(),
+        package_name: package_name.trim(),
+        icon_color: icon_color || '#6366f1',
+        callback_url: `${process.env.URL}/.netlify/functions/update-build`,
+        callback_secret: internalSecret,
+      },
+    }
+
+    const ghResponse = await fetch(
+      `https://api.github.com/repos/${githubOwner}/${githubRepo}/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${githubToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify(dispatchPayload),
+      }
+    )
+
+    if (!ghResponse.ok) {
+      const ghError = await ghResponse.text()
+      console.error('GitHub dispatch error:', ghError)
+      // Update build to failed
+      await supabase.from('builds').update({ status: 'failed', error_message: 'Failed to trigger GitHub Actions' }).eq('id', build.id)
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to trigger build pipeline' }) }
+    }
+
+    // 8. Create notification
+    await supabase.from('notifications').insert({
+      user_id: user.id,
+      title: 'Build Started',
+      message: `Your app "${app_name}" is being built. This usually takes 3-5 minutes.`,
+      type: 'info',
+    })
+
+    // 9. Increment profile builds_count
+    await supabase.rpc('increment_builds_count', { user_id_param: user.id })
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        success: true,
+        app_id: app.id,
+        build_id: build.id,
+        message: 'App created and build triggered successfully',
+      }),
+    }
+  } catch (err) {
+    console.error('create-app error:', err)
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ error: 'Internal server error' }),
+    }
+  }
+}

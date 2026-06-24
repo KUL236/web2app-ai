@@ -1,0 +1,260 @@
+name: Build Android APK
+
+on:
+  repository_dispatch:
+    types: [build-apk]
+
+jobs:
+  build:
+    name: Build Signed APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Notify: Building ──────────────────────────────────────────────
+      - name: Notify build started
+        if: ${{ github.event.client_payload.callback_url != '' }}
+        run: |
+          curl -s -X POST "${{ github.event.client_payload.callback_url }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
+            -d '{
+              "build_id": "${{ github.event.client_payload.build_id }}",
+              "status": "building",
+              "github_run_id": "${{ github.run_id }}"
+            }' || true
+
+      # ── 2. Checkout android template ────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 3. Set up Java 17 ───────────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ── 4. Cache Gradle ─────────────────────────────────────────────────
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # ── 5. Validate payload ─────────────────────────────────────────────
+      - name: Validate build payload
+        run: |
+          BUILD_ID="${{ github.event.client_payload.build_id }}"
+          APP_NAME="${{ github.event.client_payload.app_name }}"
+          WEBSITE_URL="${{ github.event.client_payload.website_url }}"
+          PACKAGE_NAME="${{ github.event.client_payload.package_name }}"
+
+          if [ -z "$BUILD_ID" ] || [ -z "$APP_NAME" ] || [ -z "$WEBSITE_URL" ] || [ -z "$PACKAGE_NAME" ]; then
+            echo "ERROR: Missing required payload fields"
+            exit 1
+          fi
+
+          echo "Build ID: $BUILD_ID"
+          echo "App Name: $APP_NAME"
+          echo "Package:  $PACKAGE_NAME"
+          echo "URL:      $WEBSITE_URL"
+
+      # ── 6. Replace placeholders ─────────────────────────────────────────
+      - name: Configure app placeholders
+        working-directory: android-template
+        env:
+          APP_NAME: ${{ github.event.client_payload.app_name }}
+          PACKAGE_NAME: ${{ github.event.client_payload.package_name }}
+          WEBSITE_URL: ${{ github.event.client_payload.website_url }}
+          ICON_COLOR: ${{ github.event.client_payload.icon_color }}
+        run: |
+          # Sanitize inputs
+          SAFE_APP_NAME=$(echo "$APP_NAME" | sed 's/[^a-zA-Z0-9 _-]//g')
+          SAFE_PACKAGE=$(echo "$PACKAGE_NAME" | sed 's/[^a-z0-9._]//g')
+          SAFE_URL=$(echo "$WEBSITE_URL" | sed 's|[^a-zA-Z0-9.:/_?=&-]||g')
+          SAFE_COLOR=$(echo "$ICON_COLOR" | grep -E '^#[0-9A-Fa-f]{6}$' || echo '#6366f1')
+
+          # Extract host for network security config
+          WEBSITE_HOST=$(echo "$SAFE_URL" | sed 's|https\?://||' | sed 's|/.*||' | sed 's|?.*||')
+
+          echo "Replacing placeholders..."
+          echo "  APP_NAME     -> $SAFE_APP_NAME"
+          echo "  PACKAGE_NAME -> $SAFE_PACKAGE"
+          echo "  WEBSITE_URL  -> $SAFE_URL"
+          echo "  ICON_COLOR   -> $SAFE_COLOR"
+          echo "  WEBSITE_HOST -> $WEBSITE_HOST"
+
+          # Replace in all relevant files
+          find . -type f \( -name "*.kt" -o -name "*.xml" -o -name "*.gradle" -o -name "*.properties" \) | while read file; do
+            sed -i \
+              -e "s|APP_NAME|$SAFE_APP_NAME|g" \
+              -e "s|APP_PACKAGE|$SAFE_PACKAGE|g" \
+              -e "s|WEBSITE_URL|$SAFE_URL|g" \
+              -e "s|ICON_COLOR|$SAFE_COLOR|g" \
+              -e "s|WEBSITE_HOST|$WEBSITE_HOST|g" \
+              "$file"
+          done
+
+          echo "Placeholder replacement complete."
+
+      # ── 7. Set up Android SDK ────────────────────────────────────────────
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # ── 8. Make gradlew executable ───────────────────────────────────────
+      - name: Make gradlew executable
+        working-directory: android-template
+        run: chmod +x gradlew
+
+      # ── 9. Decode keystore ──────────────────────────────────────────────
+      - name: Decode release keystore
+        working-directory: android-template/app
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > keystore.jks
+          echo "Keystore decoded"
+
+      # ── 10. Notify: Signing ─────────────────────────────────────────────
+      - name: Notify signing started
+        if: ${{ github.event.client_payload.callback_url != '' }}
+        run: |
+          curl -s -X POST "${{ github.event.client_payload.callback_url }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
+            -d '{
+              "build_id": "${{ github.event.client_payload.build_id }}",
+              "status": "signing",
+              "github_run_id": "${{ github.run_id }}"
+            }' || true
+
+      # ── 11. Build release APK ───────────────────────────────────────────
+      - name: Build release APK
+        working-directory: android-template
+        env:
+          KEYSTORE_PATH: app/keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            --no-daemon \
+            --stacktrace \
+            -Pandroid.injected.signing.store.file=keystore.jks \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+      # ── 12. Verify APK exists ───────────────────────────────────────────
+      - name: Verify APK output
+        working-directory: android-template
+        run: |
+          APK_PATH=$(find . -name "*.apk" -path "*/release/*" | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: No APK found after build!"
+            exit 1
+          fi
+          APK_SIZE=$(stat -c%s "$APK_PATH")
+          echo "APK found: $APK_PATH"
+          echo "APK size:  $APK_SIZE bytes"
+          echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
+          echo "APK_SIZE=$APK_SIZE" >> $GITHUB_ENV
+
+      # ── 13. Rename APK ──────────────────────────────────────────────────
+      - name: Rename APK with build info
+        run: |
+          BUILD_ID="${{ github.event.client_payload.build_id }}"
+          PACKAGE="${{ github.event.client_payload.package_name }}"
+          NEW_NAME="${PACKAGE}-${BUILD_ID:0:8}.apk"
+          APK_DIR=$(dirname "$APK_PATH")
+          mv "android-template/$APK_PATH" "android-template/$APK_DIR/$NEW_NAME" || true
+          FINAL_APK=$(find android-template -name "*.apk" -path "*/release/*" | head -1)
+          echo "FINAL_APK=$FINAL_APK" >> $GITHUB_ENV
+          echo "Renamed to: $FINAL_APK"
+
+      # ── 14. Create GitHub Release ────────────────────────────────────────
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: build-${{ github.event.client_payload.build_id }}
+          release_name: "${{ github.event.client_payload.app_name }} - Build ${{ github.event.client_payload.build_id }}"
+          body: |
+            ## ${{ github.event.client_payload.app_name }}
+
+            **Build ID:** `${{ github.event.client_payload.build_id }}`
+            **Package:** `${{ github.event.client_payload.package_name }}`
+            **Website:** ${{ github.event.client_payload.website_url }}
+            **Build Date:** ${{ github.run_id }}
+
+            ### Install Instructions
+            1. Download the APK file below
+            2. Enable "Unknown Sources" in Android Settings
+            3. Install and launch the app
+          draft: false
+          prerelease: false
+
+      # ── 15. Upload APK to Release ────────────────────────────────────────
+      - name: Upload APK to Release
+        id: upload_apk
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ env.FINAL_APK }}
+          asset_name: "${{ github.event.client_payload.package_name }}.apk"
+          asset_content_type: application/vnd.android.package-archive
+
+      # ── 16. Notify: Complete ────────────────────────────────────────────
+      - name: Notify build complete
+        if: success()
+        run: |
+          DOWNLOAD_URL="${{ steps.upload_apk.outputs.browser_download_url }}"
+          curl -s -X POST "${{ github.event.client_payload.callback_url }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
+            -d "{
+              \"build_id\": \"${{ github.event.client_payload.build_id }}\",
+              \"status\": \"complete\",
+              \"github_run_id\": \"${{ github.run_id }}\",
+              \"download_url\": \"$DOWNLOAD_URL\",
+              \"apk_size\": ${{ env.APK_SIZE }}
+            }" || true
+
+      # ── 17. Notify: Failed ──────────────────────────────────────────────
+      - name: Notify build failed
+        if: failure()
+        run: |
+          curl -s -X POST "${{ github.event.client_payload.callback_url }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
+            -d '{
+              "build_id": "${{ github.event.client_payload.build_id }}",
+              "status": "failed",
+              "github_run_id": "${{ github.run_id }}",
+              "error_message": "GitHub Actions build failed. Check the workflow logs for details."
+            }' || true
+
+      # ── 18. Cleanup ─────────────────────────────────────────────────────
+      - name: Cleanup sensitive files
+        if: always()
+        run: |
+          rm -f android-template/app/keystore.jks || true
+          echo "Cleanup complete"
+
+      # ── 19. Upload artifact for debugging ───────────────────────────────
+      - name: Upload APK artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ github.event.client_payload.build_id }}
+          path: "**/*.apk"
+          retention-days: 7
