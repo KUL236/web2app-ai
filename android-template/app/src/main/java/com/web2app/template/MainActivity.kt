@@ -1,3 +1,5 @@
+kotlin
+
 package APP_PACKAGE
 
 import android.Manifest
@@ -84,13 +86,11 @@ class MainActivity : AppCompatActivity() {
                 javaScriptCanOpenWindowsAutomatically = true
                 setSupportMultipleWindows(false)
 
-                // Dark mode support
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     isAlgorithmicDarkeningAllowed = true
                 }
             }
 
-            // JavaScript interface
             addJavascriptInterface(WebAppInterface(this@MainActivity), "Android")
 
             webViewClient = object : WebViewClient() {
@@ -135,10 +135,9 @@ class MainActivity : AppCompatActivity() {
                             true
                         }
                         url.startsWith(websiteUrl) || url.contains(Uri.parse(websiteUrl).host ?: "") -> {
-                            false // Load in WebView
+                            false
                         }
                         else -> {
-                            // Open external links in browser
                             try {
                                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                             } catch (e: Exception) {
@@ -162,7 +161,11 @@ class MainActivity : AppCompatActivity() {
                     for (resource in requestedResources) {
                         when (resource) {
                             PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
-                                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                if (ContextCompat.checkSelfPermission(
+                                        this@MainActivity,
+                                        Manifest.permission.CAMERA
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                ) {
                                     toGrant.add(resource)
                                 } else {
                                     cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
@@ -219,11 +222,10 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-                    return true // suppress console logs in production
+                    return true
                 }
             }
 
-            // Download listener
             setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
                 downloadFile(url, userAgent, contentDisposition, mimetype, contentLength)
             }
@@ -300,6 +302,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
         if (binding.webView.canGoBack()) {
             binding.webView.goBack()
@@ -323,3 +326,4 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 }
+```
