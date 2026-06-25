@@ -1,4 +1,3 @@
-kotlin
 
 package APP_PACKAGE
 
