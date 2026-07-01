@@ -17,6 +17,13 @@ if (typeof WebSocket === 'undefined' && typeof process !== 'undefined' && proces
   }
 }
 
+function describeSupabaseKey(key) {
+  if (!key) return 'missing'
+  if (key.startsWith('sb_secret_')) return 'sb_secret_'
+  if (key.startsWith('eyJ')) return 'eyJ'
+  return key.slice(0, 8)
+}
+
 function parseDataUrl(dataUrl) {
   const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl)
   if (!match) return null
@@ -109,6 +116,18 @@ exports.handler = async (event) => {
   }
 
   try {
+    console.log('create-app runtime diagnostics', {
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasServiceKey: Boolean(supabaseServiceKey),
+      serviceKeyClass: describeSupabaseKey(supabaseServiceKey),
+      nodeVersion: process?.versions?.node || null,
+      hasNodeWebSocket: Boolean(nodeWebSocket),
+    })
+
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
+      realtime: nodeWebSocket ? { transport: nodeWebSocket } : undefined,
+    })
+
     // 1. Authenticate user via Supabase JWT
     const authHeader = event.headers.authorization || event.headers.Authorization
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -116,12 +135,21 @@ exports.handler = async (event) => {
     }
     const token = authHeader.replace('Bearer ', '')
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    const userClient = createClient(supabaseUrl, supabaseServiceKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
       realtime: nodeWebSocket ? { transport: nodeWebSocket } : undefined,
     })
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+    const authResult = await userClient.auth.getUser()
+    const { data: { user }, error: authError } = authResult
+    console.log('create-app auth.getUser result', authResult)
 
     if (authError || !user) {
+      console.error('create-app auth failure', { authError, user })
       return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid token' }) }
     }
 
@@ -157,11 +185,16 @@ exports.handler = async (event) => {
     }
 
     // 3. Check package name uniqueness
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await adminClient
       .from('apps')
       .select('id')
       .eq('package_name', package_name)
       .single()
+
+    if (existingError) {
+      console.error('create-app package lookup error', existingError)
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to verify package name' }) }
+    }
 
     if (existing) {
       return { statusCode: 409, headers, body: JSON.stringify({ error: 'Package name already in use. Choose another.' }) }
@@ -172,17 +205,27 @@ exports.handler = async (event) => {
     startOfMonth.setDate(1)
     startOfMonth.setHours(0, 0, 0, 0)
 
-    const { count: monthlyBuilds } = await supabase
+    const { count: monthlyBuilds, error: monthlyBuildsError } = await adminClient
       .from('builds')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .gte('created_at', startOfMonth.toISOString())
 
-    const { data: profile } = await supabase
+    if (monthlyBuildsError) {
+      console.error('create-app monthly build lookup error', monthlyBuildsError)
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to verify build quota' }) }
+    }
+
+    const { data: profile, error: profileError } = await adminClient
       .from('profiles')
       .select('plan')
       .eq('id', user.id)
       .single()
+
+    if (profileError) {
+      console.error('create-app profile lookup error', profileError)
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to load profile' }) }
+    }
 
     const quotas = { free: 3, pro: 25, agency: 999 }
     const userPlan = profile?.plan || 'free'
@@ -200,7 +243,7 @@ exports.handler = async (event) => {
     let resolvedIconUrl = resolvedIconSource === 'favicon' ? await resolveFaviconUrl(website_url.trim()) : null
 
     // 5. Insert app record
-    const { data: app, error: appError } = await supabase
+    const { data: app, error: appError } = await adminClient
       .from('apps')
       .insert({
         user_id: user.id,
@@ -214,6 +257,7 @@ exports.handler = async (event) => {
       .select()
       .single()
 
+    console.error('create-app app insert result', { app, appError })
     if (appError) {
       console.error('App insert error:', appError)
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to create app record' }) }
@@ -221,21 +265,21 @@ exports.handler = async (event) => {
 
     if (resolvedIconSource === 'upload') {
       if (!icon_data_url) {
-        await supabase.from('apps').delete().eq('id', app.id)
+        await adminClient.from('apps').delete().eq('id', app.id)
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing uploaded icon data' }) }
       }
 
       const parsed = parseDataUrl(icon_data_url)
       if (!parsed) {
-        await supabase.from('apps').delete().eq('id', app.id)
+        await adminClient.from('apps').delete().eq('id', app.id)
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid icon image data' }) }
       }
 
       try {
-        await ensureIconBucket(supabase)
+        await ensureIconBucket(adminClient)
         const iconPath = `apps/${user.id}/${app.id}/icon.${extensionFromMimeType(parsed.mimeType)}`
 
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError } = await adminClient.storage
           .from(ICON_BUCKET)
           .upload(iconPath, parsed.buffer, {
             contentType: parsed.mimeType,
@@ -246,10 +290,10 @@ exports.handler = async (event) => {
           throw uploadError
         }
 
-        const { data: publicUrl } = supabase.storage.from(ICON_BUCKET).getPublicUrl(iconPath)
+        const { data: publicUrl } = adminClient.storage.from(ICON_BUCKET).getPublicUrl(iconPath)
         resolvedIconUrl = publicUrl.publicUrl
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await adminClient
           .from('apps')
           .update({ icon_url: resolvedIconUrl, icon_source: 'upload' })
           .eq('id', app.id)
@@ -259,13 +303,13 @@ exports.handler = async (event) => {
         }
       } catch (error) {
         console.error('Icon upload error:', error)
-        await supabase.from('apps').delete().eq('id', app.id)
+        await adminClient.from('apps').delete().eq('id', app.id)
         return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to upload app icon' }) }
       }
     }
 
     // 6. Insert build record
-    const { data: build, error: buildError } = await supabase
+    const { data: build, error: buildError } = await adminClient
       .from('builds')
       .insert({
         app_id: app.id,
@@ -276,6 +320,7 @@ exports.handler = async (event) => {
       .select()
       .single()
 
+    console.error('create-app build insert result', { build, buildError })
     if (buildError) {
       console.error('Build insert error:', buildError)
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to create build record' }) }
@@ -317,12 +362,12 @@ exports.handler = async (event) => {
       const ghError = await ghResponse.text()
       console.error('GitHub dispatch error:', ghError)
       // Update build to failed
-      await supabase.from('builds').update({ status: 'failed', error_message: 'Failed to trigger GitHub Actions' }).eq('id', build.id)
+      await adminClient.from('builds').update({ status: 'failed', error_message: 'Failed to trigger GitHub Actions' }).eq('id', build.id)
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to trigger build pipeline' }) }
     }
 
     // 8. Create notification
-    await supabase.from('notifications').insert({
+    await adminClient.from('notifications').insert({
       user_id: user.id,
       title: 'Build Started',
       message: `Your app "${app_name}" is being built. This usually takes 3-5 minutes.`,
@@ -330,7 +375,7 @@ exports.handler = async (event) => {
     })
 
     // 9. Increment profile builds_count
-    await supabase.rpc('increment_builds_count', { user_id_param: user.id })
+    await adminClient.rpc('increment_builds_count', { user_id_param: user.id })
 
     return {
       statusCode: 200,
