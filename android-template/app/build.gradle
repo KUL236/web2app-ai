@@ -5,13 +5,14 @@ plugins {
 
 def websiteUrl = project.findProperty("websiteUrl") ?: "https://your-domain.com"
 def appName = project.findProperty("appName") ?: "Web2App AI"
+def appPackage = project.findProperty("appPackage") ?: "com.kul236.webapp"
 
 android {
-    namespace 'APP_PACKAGE'
+    namespace appPackage
     compileSdk 34
     buildToolsVersion "34.0.0"
     defaultConfig {
-        applicationId "APP_PACKAGE"
+        applicationId appPackage
         minSdk 26
         targetSdk 34
         versionCode 1

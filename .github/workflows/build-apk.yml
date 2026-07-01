@@ -164,6 +164,7 @@ jobs:
           ./gradlew assembleRelease \
             --no-daemon \
             --stacktrace \
+            -PappPackage="${{ env.PACKAGE_NAME }}" \
             -PappName="${{ env.APP_NAME }}" \
             -PwebsiteUrl="${{ env.WEBSITE_URL }}" \
             -Pandroid.injected.signing.store.file=${{ github.workspace }}/android-template/app/keystore.jks \
