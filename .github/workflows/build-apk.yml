@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  repository_dispatch:
+    types:
+      - build-apk
   workflow_dispatch:
 
 jobs:
