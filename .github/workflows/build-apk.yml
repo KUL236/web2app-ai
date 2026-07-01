@@ -9,6 +9,9 @@ on:
       - build-apk
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Signed APK
