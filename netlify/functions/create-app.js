@@ -189,7 +189,7 @@ exports.handler = async (event) => {
       .from('apps')
       .select('id')
       .eq('package_name', package_name)
-      .single()
+      .maybeSingle()
 
     if (existingError) {
       console.error('create-app package lookup error', existingError)
