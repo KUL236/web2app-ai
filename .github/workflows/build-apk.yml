@@ -115,7 +115,6 @@ jobs:
             sed -i \
               -e "s|APP_NAME|$SAFE_APP_NAME_ESCAPED|g" \
               -e "s|APP_PACKAGE|$SAFE_PACKAGE_ESCAPED|g" \
-              -e "s|WEBSITE_URL|$SAFE_URL_ESCAPED|g" \
               -e "s|ICON_COLOR|$SAFE_COLOR_ESCAPED|g" \
               -e "s|WEBSITE_HOST|$WEBSITE_HOST_ESCAPED|g" \
               "$file"
@@ -165,6 +164,7 @@ jobs:
           ./gradlew assembleRelease \
             --no-daemon \
             --stacktrace \
+            -PwebsiteUrl="${{ env.WEBSITE_URL }}" \
             -Pandroid.injected.signing.store.file=${{ github.workspace }}/android-template/app/keystore.jks \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \

@@ -3,6 +3,8 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+def websiteUrl = project.findProperty("websiteUrl") ?: "https://your-domain.com"
+
 android {
     namespace 'APP_PACKAGE'
     compileSdk 34
@@ -16,7 +18,7 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField "String", "WEBSITE_URL", '"WEBSITE_URL"'
+        buildConfigField "String", "WEBSITE_URL", "\"${websiteUrl}\""
         buildConfigField "String", "APP_NAME", '"APP_NAME"'
 
         vectorDrawables {
