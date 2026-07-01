@@ -17,6 +17,7 @@ jobs:
     name: Build Signed APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event_name == 'repository_dispatch' && github.event.client_payload.buildId != '' && github.event.client_payload.appId != ''
 
     steps:
       # ── 1. Checkout android template ────────────────────────────────────
@@ -54,27 +55,36 @@ jobs:
           import os
           from urllib.request import Request, urlopen
 
-          supabase_url = os.environ['SUPABASE_URL'].rstrip('/')
-          service_key = os.environ['SUPABASE_SERVICE_ROLE_KEY']
-          build_id = os.environ['BUILD_ID']
-          app_id = os.environ['APP_ID']
+          def require(name):
+            value = (os.environ.get(name) or '').strip()
+            if not value:
+              raise SystemExit(f'Missing required value: {name}')
+            return value
+
+          supabase_url = require('SUPABASE_URL').rstrip('/')
+          service_key = require('SUPABASE_SERVICE_ROLE_KEY')
+          build_id = require('BUILD_ID')
+          app_id = require('APP_ID')
+
+          if not supabase_url.startswith(('http://', 'https://')):
+            raise SystemExit('SUPABASE_URL must start with http:// or https://')
 
           headers = {
-              'apikey': service_key,
-              'Authorization': f'Bearer {service_key}',
-              'Content-Type': 'application/json',
+            'apikey': service_key,
+            'Authorization': f'Bearer {service_key}',
+            'Content-Type': 'application/json',
           }
 
-          def fetch_json(url):
-              request = Request(url, headers=headers)
-              with urlopen(request, timeout=30) as response:
-                  return json.loads(response.read().decode('utf-8'))
+          def fetch_json(path):
+            request = Request(f'{supabase_url}{path}', headers=headers)
+            with urlopen(request, timeout=30) as response:
+              return json.loads(response.read().decode('utf-8'))
 
-          build = fetch_json(f'{supabase_url}/rest/v1/builds?id=eq.{build_id}&select=*')
-          app = fetch_json(f'{supabase_url}/rest/v1/apps?id=eq.{app_id}&select=*')
+          build = fetch_json(f'/rest/v1/builds?id=eq.{build_id}&select=*')
+          app = fetch_json(f'/rest/v1/apps?id=eq.{app_id}&select=*')
 
           if not build or not app:
-              raise SystemExit('Missing build or app row in Supabase')
+            raise SystemExit('Missing build or app row in Supabase')
 
           build = build[0]
           app = app[0]
@@ -87,8 +97,8 @@ jobs:
           print(f'ICON_COLOR={app.get("icon_color", "#6366f1")}')
           print(f'ICON_SOURCE={app.get("icon_source", "favicon")}')
           print(f'ICON_URL={app.get("icon_url", "")}')
-          print(f'CALLBACK_URL={os.environ.get("SUPABASE_URL", "").rstrip("/")}/functions/v1/update-build')
-          print(f'CALLBACK_SECRET={os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")[:0]}')
+          print(f'CALLBACK_URL={supabase_url}/functions/v1/update-build')
+          print('CALLBACK_SECRET=')
           print(f'BUILD_ROW={json.dumps(build)}')
           print(f'APP_ROW={json.dumps(app)}')
           PY
