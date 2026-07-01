@@ -27,7 +27,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
-    private val websiteUrl = BuildConfig.WEBSITE_URL
+    private val websiteUrl: String = BuildConfig.WEBSITE_URL
+    private val websiteHost: String? = Uri.parse(BuildConfig.WEBSITE_URL).host
 
     private val filePickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()
@@ -133,7 +134,7 @@ class MainActivity : AppCompatActivity() {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                             true
                         }
-                        url.startsWith(websiteUrl) || url.contains(Uri.parse(websiteUrl).host ?: "") -> {
+                        url.startsWith(websiteUrl) || (!websiteHost.isNullOrBlank() && url.contains(websiteHost)) -> {
                             false
                         }
                         else -> {
