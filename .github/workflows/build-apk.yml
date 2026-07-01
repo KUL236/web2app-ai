@@ -78,8 +78,17 @@ jobs:
           SAFE_URL=$(echo "$WEBSITE_URL" | sed 's|[^a-zA-Z0-9.:/_?=&-]||g')
           SAFE_COLOR=$(echo "$ICON_COLOR" | grep -E '^#[0-9A-Fa-f]{6}$' || echo '#6366f1')
 
-          # Extract host for network security config
           WEBSITE_HOST=$(echo "$SAFE_URL" | sed 's|https\?://||' | sed 's|/.*||' | sed 's|?.*||')
+
+          escape_sed_replacement() {
+            printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
+          }
+
+          SAFE_APP_NAME_ESCAPED=$(escape_sed_replacement "$SAFE_APP_NAME")
+          SAFE_PACKAGE_ESCAPED=$(escape_sed_replacement "$SAFE_PACKAGE")
+          SAFE_URL_ESCAPED=$(escape_sed_replacement "$SAFE_URL")
+          SAFE_COLOR_ESCAPED=$(escape_sed_replacement "$SAFE_COLOR")
+          WEBSITE_HOST_ESCAPED=$(escape_sed_replacement "$WEBSITE_HOST")
 
           echo "Replacing placeholders..."
           echo "  APP_NAME     -> $SAFE_APP_NAME"
@@ -88,14 +97,24 @@ jobs:
           echo "  ICON_COLOR   -> $SAFE_COLOR"
           echo "  WEBSITE_HOST -> $WEBSITE_HOST"
 
-          # Replace in all relevant files
-          find . -type f \( -name "*.kt" -o -name "*.xml" -o -name "*.gradle" -o -name "*.properties" \) | while read file; do
+          # Replace in Kotlin without touching the BuildConfig URL constant.
+          find . -type f -name "*.kt" | while read file; do
             sed -i \
-              -e "s|APP_NAME|$SAFE_APP_NAME|g" \
-              -e "s|APP_PACKAGE|$SAFE_PACKAGE|g" \
-              -e "s|WEBSITE_URL|$SAFE_URL|g" \
-              -e "s|ICON_COLOR|$SAFE_COLOR|g" \
-              -e "s|WEBSITE_HOST|$WEBSITE_HOST|g" \
+              -e "s|APP_NAME|$SAFE_APP_NAME_ESCAPED|g" \
+              -e "s|APP_PACKAGE|$SAFE_PACKAGE_ESCAPED|g" \
+              -e "s|ICON_COLOR|$SAFE_COLOR_ESCAPED|g" \
+              -e "s|WEBSITE_HOST|$WEBSITE_HOST_ESCAPED|g" \
+              "$file"
+          done
+
+          # Replace the remaining placeholders in resource and Gradle files.
+          find . -type f \( -name "*.xml" -o -name "*.gradle" -o -name "*.properties" \) | while read file; do
+            sed -i \
+              -e "s|APP_NAME|$SAFE_APP_NAME_ESCAPED|g" \
+              -e "s|APP_PACKAGE|$SAFE_PACKAGE_ESCAPED|g" \
+              -e "s|WEBSITE_URL|$SAFE_URL_ESCAPED|g" \
+              -e "s|ICON_COLOR|$SAFE_COLOR_ESCAPED|g" \
+              -e "s|WEBSITE_HOST|$WEBSITE_HOST_ESCAPED|g" \
               "$file"
           done
 
