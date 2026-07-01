@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS public.apps (
   website_url   TEXT NOT NULL CHECK (website_url ~ '^https?://'),
   package_name  TEXT NOT NULL UNIQUE CHECK (package_name ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$'),
   icon_color    TEXT NOT NULL DEFAULT '#6366f1' CHECK (icon_color ~ '^#[0-9A-Fa-f]{6}$'),
+  icon_source   TEXT NOT NULL DEFAULT 'favicon' CHECK (icon_source IN ('favicon', 'upload')),
+  icon_url      TEXT,
   status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()

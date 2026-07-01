@@ -130,10 +130,14 @@ export default function BuildStatus() {
           <div className="flex items-start justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
               <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden"
                 style={{ backgroundColor: (build.apps?.icon_color || '#6366f1') + '22' }}
               >
-                <Smartphone size={22} style={{ color: build.apps?.icon_color || '#6366f1' }} />
+                {build.apps?.icon_url ? (
+                  <img src={build.apps.icon_url} alt={build.apps?.app_name || 'App icon'} className="w-full h-full object-cover" />
+                ) : (
+                  <Smartphone size={22} style={{ color: build.apps?.icon_color || '#6366f1' }} />
+                )}
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white">{build.apps?.app_name}</h1>

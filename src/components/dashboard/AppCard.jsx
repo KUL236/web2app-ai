@@ -36,6 +36,7 @@ export function StatsCard({ icon, label, value, change, color = 'brand' }) {
 
 export function AppCard({ app }) {
   const latestBuild = app.builds?.[0]
+  const hasIcon = Boolean(app.icon_url)
 
   const statusIcons = {
     complete: <CheckCircle size={14} className="text-green-400" />,
@@ -54,10 +55,14 @@ export function AppCard({ app }) {
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0 overflow-hidden"
             style={{ backgroundColor: app.icon_color + '33', border: `1px solid ${app.icon_color}33` }}
           >
-            <Smartphone size={18} style={{ color: app.icon_color }} />
+            {hasIcon ? (
+              <img src={app.icon_url} alt={app.app_name} className="w-full h-full object-cover" />
+            ) : (
+              <Smartphone size={18} style={{ color: app.icon_color }} />
+            )}
           </div>
           <div>
             <h3 className="font-semibold text-white text-sm">{app.app_name}</h3>
@@ -117,10 +122,14 @@ export function BuildCard({ build }) {
       className="flex items-center gap-4 py-3 border-b border-white/5 last:border-0"
     >
       <div
-        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden"
         style={{ backgroundColor: (build.apps?.icon_color || '#6366f1') + '22' }}
       >
-        <Smartphone size={14} style={{ color: build.apps?.icon_color || '#6366f1' }} />
+        {build.apps?.icon_url ? (
+          <img src={build.apps.icon_url} alt={build.apps?.app_name || 'App icon'} className="w-full h-full object-cover" />
+        ) : (
+          <Smartphone size={14} style={{ color: build.apps?.icon_color || '#6366f1' }} />
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-white truncate">

@@ -17,7 +17,7 @@ export function useBuilds() {
         .from('builds')
         .select(`
           *,
-          apps (id, app_name, website_url, package_name, icon_color)
+          apps (id, app_name, website_url, package_name, icon_color, icon_url, icon_source)
         `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
@@ -50,7 +50,7 @@ export function useBuild(buildId) {
       .from('builds')
       .select(`
         *,
-        apps (id, app_name, website_url, package_name, icon_color)
+        apps (id, app_name, website_url, package_name, icon_color, icon_url, icon_source)
       `)
       .eq('id', buildId)
       .eq('user_id', user.id)
@@ -68,7 +68,7 @@ export function useBuild(buildId) {
       if (!build || ['complete', 'failed'].includes(build?.status)) return
       const { data } = await supabase
         .from('builds')
-        .select(`*, apps (id, app_name, website_url, package_name, icon_color)`)
+        .select(`*, apps (id, app_name, website_url, package_name, icon_color, icon_url, icon_source)`)
         .eq('id', buildId)
         .single()
       if (data) setBuild(data)
@@ -90,7 +90,7 @@ export function useRecentBuilds(limit = 5) {
     const fetch = async () => {
       const { data } = await supabase
         .from('builds')
-        .select(`*, apps (app_name, icon_color)`)
+        .select(`*, apps (app_name, icon_color, icon_url, icon_source)`)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(limit)

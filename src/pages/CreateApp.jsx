@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Globe, Smartphone, Package, Palette, ArrowRight, Info, Loader2 } from 'lucide-react'
+import { Globe, Smartphone, Package, Palette, ArrowRight, Info, Loader2, Sparkles, Upload, Image as ImageIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -16,6 +16,46 @@ const ICON_COLORS = [
 ]
 
 const NETLIFY_BASE = import.meta.env.VITE_NETLIFY_URL || ''
+const MAX_ICON_FILE_SIZE = 5 * 1024 * 1024
+
+function resizeImageToDataUrl(file, size = 1024) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file)
+    const image = new window.Image()
+
+    image.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+
+      const context = canvas.getContext('2d')
+      if (!context) {
+        URL.revokeObjectURL(objectUrl)
+        reject(new Error('Unable to process the selected image'))
+        return
+      }
+
+      const scale = Math.min(size / image.width, size / image.height)
+      const drawWidth = image.width * scale
+      const drawHeight = image.height * scale
+      const offsetX = (size - drawWidth) / 2
+      const offsetY = (size - drawHeight) / 2
+
+      context.clearRect(0, 0, size, size)
+      context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
+
+      URL.revokeObjectURL(objectUrl)
+      resolve(canvas.toDataURL('image/png'))
+    }
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('Unable to load the selected image'))
+    }
+
+    image.src = objectUrl
+  })
+}
 
 export default function CreateApp() {
   const navigate = useNavigate()
@@ -30,6 +70,21 @@ export default function CreateApp() {
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState('')
+  const [useWebsiteFavicon, setUseWebsiteFavicon] = useState(true)
+  const [iconFile, setIconFile] = useState(null)
+  const [iconPreview, setIconPreview] = useState('')
+
+  useEffect(() => {
+    if (!iconFile) {
+      setIconPreview('')
+      return undefined
+    }
+
+    const objectUrl = URL.createObjectURL(iconFile)
+    setIconPreview(objectUrl)
+
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [iconFile])
 
   // Auto-generate package name from app name + url
   useEffect(() => {
@@ -60,6 +115,13 @@ export default function CreateApp() {
       errs.packageName = 'Must be valid package format (e.g. com.example.app)'
     }
 
+    if (!useWebsiteFavicon) {
+      if (!iconFile) errs.iconFile = 'Upload a PNG or JPG icon or enable website favicon mode'
+      else if (!['image/png', 'image/jpeg', 'image/jpg'].includes(iconFile.type)) {
+        errs.iconFile = 'App icon must be a PNG or JPG image'
+      }
+    }
+
     return errs
   }
 
@@ -72,6 +134,11 @@ export default function CreateApp() {
     setErrors({})
 
     try {
+      let iconDataUrl = ''
+      if (!useWebsiteFavicon && iconFile) {
+        iconDataUrl = await resizeImageToDataUrl(iconFile, 1024)
+      }
+
       const session = await getSession()
       if (!session) throw new Error('Not authenticated')
 
@@ -86,6 +153,8 @@ export default function CreateApp() {
           website_url: form.websiteUrl.trim(),
           package_name: form.packageName.trim(),
           icon_color: form.iconColor,
+          icon_source: useWebsiteFavicon ? 'favicon' : 'upload',
+          icon_data_url: iconDataUrl,
           user_id: user.id,
         }),
       })
@@ -109,6 +178,35 @@ export default function CreateApp() {
   const updateField = (field, value) => {
     setForm(f => ({ ...f, [field]: value }))
     if (errors[field]) setErrors(e => ({ ...e, [field]: '' }))
+  }
+
+  const handleIconFileChange = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      setErrors(e => ({ ...e, iconFile: 'App icon must be a PNG or JPG image' }))
+      event.target.value = ''
+      return
+    }
+
+    if (file.size > MAX_ICON_FILE_SIZE) {
+      setErrors(e => ({ ...e, iconFile: 'App icon must be smaller than 5 MB' }))
+      event.target.value = ''
+      return
+    }
+
+    setUseWebsiteFavicon(false)
+    setIconFile(file)
+    if (errors.iconFile) setErrors(e => ({ ...e, iconFile: '' }))
+  }
+
+  const handleUseFaviconChange = (checked) => {
+    setUseWebsiteFavicon(checked)
+    if (checked) {
+      setIconFile(null)
+      if (errors.iconFile) setErrors(e => ({ ...e, iconFile: '' }))
+    }
   }
 
   return (
@@ -168,6 +266,75 @@ export default function CreateApp() {
                   hint="Unique identifier for your Android app (auto-generated)"
                   icon={<Package size={16} />}
                 />
+              </div>
+
+              {/* Icon source */}
+              <div className="card">
+                <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                  <ImageIcon size={16} className="text-brand-400" />
+                  App Icon
+                </h2>
+
+                <label className="flex items-start gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={useWebsiteFavicon}
+                    onChange={e => handleUseFaviconChange(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-white/20 bg-dark-700 text-brand-500 focus:ring-brand-500"
+                  />
+                  <div>
+                    <p className="text-sm text-white font-medium flex items-center gap-2">
+                      Use website favicon as app icon
+                      <Sparkles size={14} className="text-brand-400" />
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      If enabled, we will try to use your website's favicon automatically.
+                    </p>
+                  </div>
+                </label>
+
+                <div className="mt-4 rounded-2xl border border-white/10 bg-dark-900 p-4">
+                  {useWebsiteFavicon ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-brand-500/15 border border-brand-500/20 overflow-hidden flex-shrink-0">
+                        <Sparkles size={20} className="text-brand-300" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-white font-medium">Website favicon mode</p>
+                        <p className="text-xs text-gray-400">The build will fetch the site favicon and generate Android icons from it.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {iconPreview ? (
+                          <img src={iconPreview} alt="App icon preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <Upload size={20} className="text-brand-300" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-medium">Upload custom app icon</p>
+                        <p className="text-xs text-gray-400">PNG or JPG. We'll resize it to 1024×1024 before build.</p>
+                        {iconFile && <p className="text-xs text-brand-300 mt-1 truncate">Selected: {iconFile.name}</p>}
+                      </div>
+                      <label className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white hover:bg-white/10 transition-colors cursor-pointer">
+                        <Upload size={14} />
+                        Choose image
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          onChange={handleIconFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {errors.iconFile && (
+                    <p className="text-xs text-red-400 mt-3">{errors.iconFile}</p>
+                  )}
+                </div>
               </div>
 
               {/* Color picker */}
@@ -246,10 +413,16 @@ export default function CreateApp() {
                       {form.appName || 'My App'}
                     </span>
                     <div
-                      className="w-5 h-5 rounded-md flex items-center justify-center"
+                        className="w-5 h-5 rounded-md flex items-center justify-center overflow-hidden"
                       style={{ backgroundColor: form.iconColor }}
                     >
-                      <Smartphone size={11} className="text-white" />
+                        {useWebsiteFavicon ? (
+                          <Sparkles size={10} className="text-white" />
+                        ) : iconPreview ? (
+                          <img src={iconPreview} alt="Icon preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <Smartphone size={11} className="text-white" />
+                        )}
                     </div>
                   </div>
 
@@ -268,7 +441,13 @@ export default function CreateApp() {
                           className="w-12 h-12 rounded-2xl flex items-center justify-center"
                           style={{ backgroundColor: form.iconColor + '33' }}
                         >
-                          <Smartphone size={22} style={{ color: form.iconColor }} />
+                          {useWebsiteFavicon ? (
+                            <Sparkles size={22} style={{ color: form.iconColor }} />
+                          ) : iconPreview ? (
+                            <img src={iconPreview} alt="Icon preview" className="w-full h-full object-cover rounded-2xl" />
+                          ) : (
+                            <Smartphone size={22} style={{ color: form.iconColor }} />
+                          )}
                         </div>
                         <p className="text-xs text-gray-500">Enter URL to preview</p>
                       </div>

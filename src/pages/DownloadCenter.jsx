@@ -103,10 +103,14 @@ export default function DownloadCenter() {
               >
                 {/* Icon */}
                 <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                  className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden"
                   style={{ backgroundColor: (build.apps?.icon_color || '#6366f1') + '22' }}
                 >
-                  <Smartphone size={22} style={{ color: build.apps?.icon_color || '#6366f1' }} />
+                  {build.apps?.icon_url ? (
+                    <img src={build.apps.icon_url} alt={build.apps?.app_name || 'App icon'} className="w-full h-full object-cover" />
+                  ) : (
+                    <Smartphone size={22} style={{ color: build.apps?.icon_color || '#6366f1' }} />
+                  )}
                 </div>
 
                 {/* Info */}

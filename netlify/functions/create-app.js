@@ -6,6 +6,82 @@ const githubToken = process.env.GITHUB_TOKEN
 const githubOwner = process.env.GITHUB_OWNER
 const githubRepo = process.env.GITHUB_REPO
 const internalSecret = process.env.INTERNAL_SECRET
+const ICON_BUCKET = 'app-icons'
+
+function parseDataUrl(dataUrl) {
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl)
+  if (!match) return null
+  return {
+    mimeType: match[1],
+    buffer: Buffer.from(match[2], 'base64'),
+  }
+}
+
+function extensionFromMimeType(mimeType) {
+  switch (mimeType) {
+    case 'image/png':
+      return 'png'
+    case 'image/jpeg':
+      return 'jpg'
+    case 'image/jpg':
+      return 'jpg'
+    case 'image/webp':
+      return 'webp'
+    default:
+      return 'png'
+  }
+}
+
+async function ensureIconBucket(client) {
+  try {
+    const { data } = await client.storage.getBucket(ICON_BUCKET)
+    if (data) return
+  } catch {
+    // Bucket does not exist yet.
+  }
+
+  try {
+    const { error } = await client.storage.createBucket(ICON_BUCKET, { public: true })
+    if (error && !/already exists/i.test(error.message || '')) {
+      throw error
+    }
+  } catch (error) {
+    if (!/already exists/i.test(error.message || '')) {
+      throw error
+    }
+  }
+}
+
+async function resolveFaviconUrl(websiteUrl) {
+  const fallback = new URL('/favicon.ico', websiteUrl).href
+
+  try {
+    const response = await fetch(websiteUrl, {
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+      },
+    })
+
+    if (!response.ok) return fallback
+
+    const html = await response.text()
+    const iconRegex = /<link[^>]+rel=["'][^"']*(?:icon|shortcut icon|apple-touch-icon)[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/gi
+    const matches = [...html.matchAll(iconRegex)]
+
+    for (const match of matches) {
+      try {
+        return new URL(match[1], websiteUrl).href
+      } catch {
+        // Continue to the next candidate.
+      }
+    }
+  } catch {
+    // Fall back to the conventional favicon path.
+  }
+
+  return fallback
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -46,7 +122,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }
     }
 
-    const { app_name, website_url, package_name, icon_color } = body
+    const { app_name, website_url, package_name, icon_color, icon_source, icon_data_url } = body
 
     if (!app_name || !website_url || !package_name) {
       return {
@@ -109,6 +185,9 @@ exports.handler = async (event) => {
       }
     }
 
+    const resolvedIconSource = icon_source === 'upload' ? 'upload' : 'favicon'
+    let resolvedIconUrl = resolvedIconSource === 'favicon' ? await resolveFaviconUrl(website_url.trim()) : null
+
     // 5. Insert app record
     const { data: app, error: appError } = await supabase
       .from('apps')
@@ -118,6 +197,8 @@ exports.handler = async (event) => {
         website_url: website_url.trim(),
         package_name: package_name.trim(),
         icon_color: icon_color || '#6366f1',
+        icon_source: resolvedIconSource,
+        icon_url: resolvedIconUrl,
       })
       .select()
       .single()
@@ -125,6 +206,51 @@ exports.handler = async (event) => {
     if (appError) {
       console.error('App insert error:', appError)
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to create app record' }) }
+    }
+
+    if (resolvedIconSource === 'upload') {
+      if (!icon_data_url) {
+        await supabase.from('apps').delete().eq('id', app.id)
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing uploaded icon data' }) }
+      }
+
+      const parsed = parseDataUrl(icon_data_url)
+      if (!parsed) {
+        await supabase.from('apps').delete().eq('id', app.id)
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid icon image data' }) }
+      }
+
+      try {
+        await ensureIconBucket(supabase)
+        const iconPath = `apps/${user.id}/${app.id}/icon.${extensionFromMimeType(parsed.mimeType)}`
+
+        const { error: uploadError } = await supabase.storage
+          .from(ICON_BUCKET)
+          .upload(iconPath, parsed.buffer, {
+            contentType: parsed.mimeType,
+            upsert: true,
+          })
+
+        if (uploadError) {
+          throw uploadError
+        }
+
+        const { data: publicUrl } = supabase.storage.from(ICON_BUCKET).getPublicUrl(iconPath)
+        resolvedIconUrl = publicUrl.publicUrl
+
+        const { error: updateError } = await supabase
+          .from('apps')
+          .update({ icon_url: resolvedIconUrl, icon_source: 'upload' })
+          .eq('id', app.id)
+
+        if (updateError) {
+          throw updateError
+        }
+      } catch (error) {
+        console.error('Icon upload error:', error)
+        await supabase.from('apps').delete().eq('id', app.id)
+        return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to upload app icon' }) }
+      }
     }
 
     // 6. Insert build record
@@ -155,6 +281,8 @@ exports.handler = async (event) => {
         website_url: website_url.trim(),
         package_name: package_name.trim(),
         icon_color: icon_color || '#6366f1',
+        icon_source: resolvedIconSource,
+        icon_url: resolvedIconUrl,
         callback_url: `${process.env.URL}/.netlify/functions/update-build`,
         callback_secret: internalSecret,
       },

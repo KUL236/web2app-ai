@@ -125,16 +125,102 @@ jobs:
 
           echo "Placeholder replacement complete."
 
-      # ── 7. Set up Android SDK ────────────────────────────────────────────
+      # ── 7. Generate launcher icons ──────────────────────────────────────
+      - name: Generate launcher icons
+        working-directory: android-template
+        env:
+          APP_ICON_URL: ${{ github.event.client_payload.icon_url }}
+          WEBSITE_URL: ${{ github.event.client_payload.website_url }}
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          import io
+          import os
+          import sys
+          from pathlib import Path
+          from urllib.parse import quote
+          from urllib.request import Request, urlopen
+
+          from PIL import Image, ImageDraw, ImageOps
+
+          icon_url = os.environ.get('APP_ICON_URL', '').strip()
+          website_url = os.environ.get('WEBSITE_URL', '').strip()
+
+          if not icon_url and website_url:
+            icon_url = f"https://www.google.com/s2/favicons?sz=512&domain_url={quote(website_url, safe='')}"
+
+          if not icon_url:
+            print('No icon URL available; keeping the template launcher assets.')
+            sys.exit(0)
+
+          def download_image(url):
+            request = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urlopen(request, timeout=30) as response:
+              return response.read()
+
+          try:
+            raw_image = download_image(icon_url)
+            source = Image.open(io.BytesIO(raw_image)).convert('RGBA')
+          except Exception as exc:
+            print(f'Icon download failed ({exc}); keeping the template launcher assets.')
+            sys.exit(0)
+
+          resampling = getattr(getattr(Image, 'Resampling', Image), 'LANCZOS')
+
+          def render_icon(size, round_icon=False):
+            canvas = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+            icon = ImageOps.contain(source, (int(size * 0.72), int(size * 0.72)), resampling)
+            x = (size - icon.width) // 2
+            y = (size - icon.height) // 2
+            canvas.alpha_composite(icon, (x, y))
+
+            if round_icon:
+              mask = Image.new('L', (size, size), 0)
+              draw = ImageDraw.Draw(mask)
+              draw.ellipse((0, 0, size - 1, size - 1), fill=255)
+              canvas.putalpha(mask)
+
+            return canvas
+
+          densities = {
+            'mdpi': 48,
+            'hdpi': 72,
+            'xhdpi': 96,
+            'xxhdpi': 144,
+            'xxxhdpi': 192,
+          }
+
+          for density, size in densities.items():
+            mipmap_dir = Path('app/src/main/res') / f'mipmap-{density}'
+            mipmap_dir.mkdir(parents=True, exist_ok=True)
+            render_icon(size).save(mipmap_dir / 'ic_launcher.png')
+            render_icon(size, round_icon=True).save(mipmap_dir / 'ic_launcher_round.png')
+
+          drawable_dir = Path('app/src/main/res/drawable')
+          drawable_dir.mkdir(parents=True, exist_ok=True)
+          render_icon(432).save(drawable_dir / 'ic_launcher_foreground.png')
+
+          for path in [
+            Path('app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml'),
+            Path('app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml'),
+            Path('app/src/main/res/drawable/ic_launcher_foreground.xml'),
+          ]:
+            if path.exists():
+              path.unlink()
+
+          print(f'Generated launcher icons from {icon_url}')
+          PY
+
+      # ── 8. Set up Android SDK ────────────────────────────────────────────
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # ── 8. Make gradlew executable ───────────────────────────────────────
+      # ── 9. Make gradlew executable ───────────────────────────────────────
       - name: Make gradlew executable
         working-directory: android-template
         run: chmod +x gradlew
 
-      # ── 9. Decode keystore ──────────────────────────────────────────────
+      # ── 10. Decode keystore ──────────────────────────────────────────────
       - name: Decode release keystore
         working-directory: android-template/app
         env:
@@ -143,7 +229,7 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 --decode > keystore.jks
           echo "Keystore decoded"
 
-      # ── 10. Notify: Signing ─────────────────────────────────────────────
+      # ── 11. Notify: Signing ─────────────────────────────────────────────
       - name: Notify signing started
         if: ${{ github.event.client_payload.callback_url != '' && github.event.client_payload.callback_url != null }}
         run: |
@@ -156,7 +242,7 @@ jobs:
               "github_run_id": "${{ github.run_id }}"
             }' || true
 
-      # ── 11. Build release APK ───────────────────────────────────────────
+      # ── 12. Build release APK ───────────────────────────────────────────
       - name: Build release APK
         working-directory: android-template
         env:
@@ -175,7 +261,7 @@ jobs:
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
-      # ── 12. Verify APK exists ───────────────────────────────────────────
+      # ── 13. Verify APK exists ───────────────────────────────────────────
       - name: Verify APK output
         working-directory: android-template
         run: |
@@ -190,7 +276,7 @@ jobs:
           echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
           echo "APK_SIZE=$APK_SIZE" >> $GITHUB_ENV
 
-      # ── 13. Rename APK ──────────────────────────────────────────────────
+      # ── 14. Rename APK ──────────────────────────────────────────────────
       - name: Rename APK with build info
         working-directory: android-template
         run: |
@@ -202,7 +288,7 @@ jobs:
           echo "FINAL_APK=android-template/$APK_DIR/$NEW_NAME" >> $GITHUB_ENV
           echo "Renamed to: $APK_DIR/$NEW_NAME"
 
-      # ── 14. Create GitHub Release ────────────────────────────────────────
+      # ── 15. Create GitHub Release ────────────────────────────────────────
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
@@ -226,7 +312,7 @@ jobs:
           draft: false
           prerelease: false
 
-      # ── 15. Upload APK to Release ────────────────────────────────────────
+      # ── 16. Upload APK to Release ────────────────────────────────────────
       - name: Upload APK to Release
         id: upload_apk
         uses: actions/upload-release-asset@v1
@@ -238,7 +324,7 @@ jobs:
           asset_name: "${{ env.PACKAGE_NAME }}.apk"
           asset_content_type: application/vnd.android.package-archive
 
-      # ── 16. Notify: Complete ────────────────────────────────────────────
+      # ── 17. Notify: Complete ────────────────────────────────────────────
       - name: Notify build complete
         if: success() && github.event.client_payload.callback_url != '' && github.event.client_payload.callback_url != null
         run: |
@@ -254,7 +340,7 @@ jobs:
               \"apk_size\": ${{ env.APK_SIZE }}
             }" || true
 
-      # ── 17. Notify: Failed ──────────────────────────────────────────────
+      # ── 18. Notify: Failed ──────────────────────────────────────────────
       - name: Notify build failed
         if: failure() && github.event.client_payload.callback_url != '' && github.event.client_payload.callback_url != null
         run: |
@@ -268,14 +354,14 @@ jobs:
               "error_message": "GitHub Actions build failed. Check the workflow logs for details."
             }' || true
 
-      # ── 18. Cleanup ─────────────────────────────────────────────────────
+      # ── 19. Cleanup ─────────────────────────────────────────────────────
       - name: Cleanup sensitive files
         if: always()
         run: |
           rm -f android-template/app/keystore.jks || true
           echo "Cleanup complete"
 
-      # ── 19. Upload artifact for debugging ───────────────────────────────
+      # ── 20. Upload artifact for debugging ───────────────────────────────
       - name: Upload APK artifact
         if: always()
         uses: actions/upload-artifact@v4

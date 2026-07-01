@@ -105,6 +105,7 @@ React (Netlify CDN) + Netlify Functions + Supabase + GitHub Actions
    - Website URL: `https://example.com`
    - Package: auto-generated
 4. Click **Create App & Build APK**
+   - You can keep **Use website favicon as app icon** enabled, or upload a custom PNG/JPG logo instead.
 5. Watch the Build Status page — should update every 5 seconds
 6. After ~3-5 minutes → Download your APK!
 

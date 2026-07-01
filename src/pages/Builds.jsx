@@ -63,10 +63,14 @@ export default function Builds() {
                 className="card-hover flex items-center gap-4 cursor-pointer"
               >
                 <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden"
                   style={{ backgroundColor: (build.apps?.icon_color || '#6366f1') + '22' }}
                 >
-                  <Smartphone size={18} style={{ color: build.apps?.icon_color || '#6366f1' }} />
+                  {build.apps?.icon_url ? (
+                    <img src={build.apps.icon_url} alt={build.apps?.app_name || 'App icon'} className="w-full h-full object-cover" />
+                  ) : (
+                    <Smartphone size={18} style={{ color: build.apps?.icon_color || '#6366f1' }} />
+                  )}
                 </div>
 
                 <div className="flex-1 min-w-0">
