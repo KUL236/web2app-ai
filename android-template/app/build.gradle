@@ -4,6 +4,7 @@ plugins {
 }
 
 def websiteUrl = project.findProperty("websiteUrl") ?: "https://your-domain.com"
+def appName = project.findProperty("appName") ?: "Web2App AI"
 
 android {
     namespace 'APP_PACKAGE'
@@ -19,7 +20,7 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField "String", "WEBSITE_URL", "\"${websiteUrl}\""
-        buildConfigField "String", "APP_NAME", '"APP_NAME"'
+        buildConfigField "String", "APP_NAME", "\"${appName}\""
 
         vectorDrawables {
             useSupportLibrary true

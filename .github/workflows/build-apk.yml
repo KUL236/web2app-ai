@@ -110,8 +110,8 @@ jobs:
               "$file"
           done
 
-          # Replace the remaining placeholders in resource and Gradle files.
-          find . -type f \( -name "*.xml" -o -name "*.gradle" -o -name "*.properties" \) | while read file; do
+          # Replace the remaining placeholders in resource and properties files.
+          find . -type f \( -name "*.xml" -o -name "*.properties" \) | while read file; do
             sed -i \
               -e "s|APP_NAME|$SAFE_APP_NAME_ESCAPED|g" \
               -e "s|APP_PACKAGE|$SAFE_PACKAGE_ESCAPED|g" \
@@ -164,6 +164,7 @@ jobs:
           ./gradlew assembleRelease \
             --no-daemon \
             --stacktrace \
+            -PappName="${{ env.APP_NAME }}" \
             -PwebsiteUrl="${{ env.WEBSITE_URL }}" \
             -Pandroid.injected.signing.store.file=${{ github.workspace }}/android-template/app/keystore.jks \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
