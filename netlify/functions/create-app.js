@@ -8,6 +8,15 @@ const githubRepo = process.env.GITHUB_REPO
 const internalSecret = process.env.INTERNAL_SECRET
 const ICON_BUCKET = 'app-icons'
 
+let nodeWebSocket
+if (typeof WebSocket === 'undefined' && typeof process !== 'undefined' && process.versions?.node) {
+  try {
+    nodeWebSocket = require('ws')
+  } catch {
+    nodeWebSocket = undefined
+  }
+}
+
 function parseDataUrl(dataUrl) {
   const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl)
   if (!match) return null
@@ -107,7 +116,9 @@ exports.handler = async (event) => {
     }
     const token = authHeader.replace('Bearer ', '')
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      realtime: nodeWebSocket ? { transport: nodeWebSocket } : undefined,
+    })
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
 
     if (authError || !user) {
