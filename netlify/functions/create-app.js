@@ -2,6 +2,7 @@ const { createClient } = require('@supabase/supabase-js')
 
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
 const githubToken = process.env.GITHUB_TOKEN
 const githubOwner = process.env.GITHUB_OWNER
 const githubRepo = process.env.GITHUB_REPO
@@ -119,7 +120,9 @@ exports.handler = async (event) => {
     console.log('create-app runtime diagnostics', {
       hasSupabaseUrl: Boolean(supabaseUrl),
       hasServiceKey: Boolean(supabaseServiceKey),
+      hasAnonKey: Boolean(supabaseAnonKey),
       serviceKeyClass: describeSupabaseKey(supabaseServiceKey),
+      anonKeyClass: describeSupabaseKey(supabaseAnonKey),
       nodeVersion: process?.versions?.node || null,
       hasNodeWebSocket: Boolean(nodeWebSocket),
     })
@@ -135,7 +138,11 @@ exports.handler = async (event) => {
     }
     const token = authHeader.replace('Bearer ', '')
 
-    const userClient = createClient(supabaseUrl, supabaseServiceKey, {
+    if (!supabaseAnonKey) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Missing Supabase anon key' }) }
+    }
+
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -185,7 +192,7 @@ exports.handler = async (event) => {
     }
 
     // 3. Check package name uniqueness
-    const { data: existing, error: existingError } = await adminClient
+    const { data: existing, error: existingError } = await userClient
       .from('apps')
       .select('id')
       .eq('package_name', package_name)
@@ -205,7 +212,7 @@ exports.handler = async (event) => {
     startOfMonth.setDate(1)
     startOfMonth.setHours(0, 0, 0, 0)
 
-    const { count: monthlyBuilds, error: monthlyBuildsError } = await adminClient
+    const { count: monthlyBuilds, error: monthlyBuildsError } = await userClient
       .from('builds')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
@@ -216,7 +223,7 @@ exports.handler = async (event) => {
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to verify build quota' }) }
     }
 
-    const { data: profile, error: profileError } = await adminClient
+    const { data: profile, error: profileError } = await userClient
       .from('profiles')
       .select('plan')
       .eq('id', user.id)
@@ -243,7 +250,7 @@ exports.handler = async (event) => {
     let resolvedIconUrl = resolvedIconSource === 'favicon' ? await resolveFaviconUrl(website_url.trim()) : null
 
     // 5. Insert app record
-    const { data: app, error: appError } = await adminClient
+    const { data: app, error: appError } = await userClient
       .from('apps')
       .insert({
         user_id: user.id,
@@ -293,7 +300,7 @@ exports.handler = async (event) => {
         const { data: publicUrl } = adminClient.storage.from(ICON_BUCKET).getPublicUrl(iconPath)
         resolvedIconUrl = publicUrl.publicUrl
 
-        const { error: updateError } = await adminClient
+        const { error: updateError } = await userClient
           .from('apps')
           .update({ icon_url: resolvedIconUrl, icon_source: 'upload' })
           .eq('id', app.id)
@@ -303,13 +310,13 @@ exports.handler = async (event) => {
         }
       } catch (error) {
         console.error('Icon upload error:', error)
-        await adminClient.from('apps').delete().eq('id', app.id)
+        await userClient.from('apps').delete().eq('id', app.id)
         return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to upload app icon' }) }
       }
     }
 
     // 6. Insert build record
-    const { data: build, error: buildError } = await adminClient
+    const { data: build, error: buildError } = await userClient
       .from('builds')
       .insert({
         app_id: app.id,
@@ -362,12 +369,12 @@ exports.handler = async (event) => {
       const ghError = await ghResponse.text()
       console.error('GitHub dispatch error:', ghError)
       // Update build to failed
-      await adminClient.from('builds').update({ status: 'failed', error_message: 'Failed to trigger GitHub Actions' }).eq('id', build.id)
+      await userClient.from('builds').update({ status: 'failed', error_message: 'Failed to trigger GitHub Actions' }).eq('id', build.id)
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to trigger build pipeline' }) }
     }
 
     // 8. Create notification
-    await adminClient.from('notifications').insert({
+    await userClient.from('notifications').insert({
       user_id: user.id,
       title: 'Build Started',
       message: `Your app "${app_name}" is being built. This usually takes 3-5 minutes.`,
@@ -375,7 +382,7 @@ exports.handler = async (event) => {
     })
 
     // 9. Increment profile builds_count
-    await adminClient.rpc('increment_builds_count', { user_id_param: user.id })
+    await userClient.rpc('increment_builds_count', { user_id_param: user.id })
 
     return {
       statusCode: 200,
