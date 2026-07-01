@@ -6,7 +6,6 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABA
 const githubToken = process.env.GITHUB_TOKEN
 const githubOwner = process.env.GITHUB_OWNER
 const githubRepo = process.env.GITHUB_REPO
-const internalSecret = process.env.INTERNAL_SECRET
 const ICON_BUCKET = 'app-icons'
 
 let nodeWebSocket
@@ -337,17 +336,8 @@ exports.handler = async (event) => {
     const dispatchPayload = {
       event_type: 'build-apk',
       client_payload: {
-        build_id: build.id,
-        app_id: app.id,
-        user_id: user.id,
-        app_name: app_name.trim(),
-        website_url: website_url.trim(),
-        package_name: package_name.trim(),
-        icon_color: icon_color || '#6366f1',
-        icon_source: resolvedIconSource,
-        icon_url: resolvedIconUrl,
-        callback_url: `${process.env.URL}/.netlify/functions/update-build`,
-        callback_secret: internalSecret,
+        buildId: build.id,
+        appId: app.id,
       },
     }
 
@@ -365,9 +355,13 @@ exports.handler = async (event) => {
       }
     )
 
-    if (!ghResponse.ok) {
+    if (ghResponse.status !== 204) {
       const ghError = await ghResponse.text()
-      console.error('GitHub dispatch error:', ghError)
+      console.error('GitHub dispatch error:', {
+        status: ghResponse.status,
+        statusText: ghResponse.statusText,
+        body: ghError,
+      })
       // Update build to failed
       await userClient.from('builds').update({ status: 'failed', error_message: 'Failed to trigger GitHub Actions' }).eq('id', build.id)
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to trigger build pipeline' }) }
