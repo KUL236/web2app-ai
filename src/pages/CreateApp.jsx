@@ -241,7 +241,7 @@ export default function CreateApp() {
                   <Input
                     label="Website URL"
                     type="url"
-                    placeholder="https://example.com"
+                    placeholder="https://web2appconversion.netlify.app/"
                     value={form.websiteUrl}
                     onChange={e => updateField('websiteUrl', e.target.value)}
                     error={errors.websiteUrl}

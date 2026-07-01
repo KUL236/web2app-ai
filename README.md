@@ -72,14 +72,14 @@ React (Netlify CDN) + Netlify Functions + Supabase + GitHub Actions
    ```
    VITE_SUPABASE_URL          = https://lgmndgllitkbdbjiyaef.supabase.co
    VITE_SUPABASE_ANON_KEY     = sb_publishable_sfZ4-OzupQmdN7OCZQpVrg_I1jCaloE
-   VITE_NETLIFY_URL           = https://YOUR-SITE.netlify.app
+   VITE_NETLIFY_URL           = https://web2appconversion.netlify.app/
    SUPABASE_URL               = https://lgmndgllitkbdbjiyaef.supabase.co
    SUPABASE_SERVICE_ROLE_KEY  = (service role key from Supabase)
    GITHUB_TOKEN               = (Personal Access Token — needs repo + workflow scopes)
    GITHUB_OWNER               = your_github_username
    GITHUB_REPO                = web2app-ai
    INTERNAL_SECRET            = (same value you set in GitHub secrets)
-   URL                        = https://YOUR-SITE.netlify.app
+   URL                        = https://web2appconversion.netlify.app/
    ```
 5. Click **Deploy site**
 
@@ -102,7 +102,7 @@ React (Netlify CDN) + Netlify Functions + Supabase + GitHub Actions
 2. Go to **Create App**
 3. Enter:
    - App Name: `Test App`
-   - Website URL: `https://example.com`
+   - Website URL: `https://web2appconversion.netlify.app/`
    - Package: auto-generated
 4. Click **Create App & Build APK**
    - You can keep **Use website favicon as app icon** enabled, or upload a custom PNG/JPG logo instead.

@@ -22,7 +22,7 @@ jobs:
       BUILD_ID: ${{ github.run_number }}
       APP_NAME: Web2App AI
       PACKAGE_NAME: com.kul236.webapp
-      WEBSITE_URL: https://your-domain.com
+      WEBSITE_URL: https://web2appconversion.netlify.app/
       ICON_COLOR: "#6366f1"
 
     steps:
@@ -75,7 +75,7 @@ jobs:
         env:
           APP_NAME: Web2App AI
           PACKAGE_NAME: com.kul236.webapp
-          WEBSITE_URL: https://your-domain.com
+          WEBSITE_URL: https://web2appconversion.netlify.app/
           ICON_COLOR: "#6366f1"
         run: |
           # Sanitize inputs
