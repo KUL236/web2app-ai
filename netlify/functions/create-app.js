@@ -338,6 +338,8 @@ exports.handler = async (event) => {
       client_payload: {
         buildId: build.id,
         appId: app.id,
+        callback_url:app.callback_url,
+        callback_secret:app.callback_secret,
       },
     }
 
