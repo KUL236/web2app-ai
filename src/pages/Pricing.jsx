@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CheckCircle, Zap, Star } from 'lucide-react'
+import { CheckCircle, Zap, Star, Sparkles, Crown, ShieldCheck } from 'lucide-react'
 import Navbar from '../components/layout/Navbar'
 import Footer from '../components/layout/Footer'
 import Button from '../components/ui/Button'
@@ -8,10 +8,11 @@ import Button from '../components/ui/Button'
 const plans = [
   {
     name: 'Free',
-    price: '$0',
+    price: '₹0',
     period: '/month',
     description: 'Perfect for trying out Web2App AI',
     color: 'gray',
+    icon: ShieldCheck,
     features: [
       '3 app builds per month',
       'Standard build queue',
@@ -24,10 +25,11 @@ const plans = [
   },
   {
     name: 'Pro',
-    price: '$19',
+    price: '₹99',
     period: '/month',
     description: 'For freelancers and small teams',
     color: 'brand',
+    icon: Sparkles,
     popular: true,
     features: [
       '25 app builds per month',
@@ -44,10 +46,11 @@ const plans = [
   },
   {
     name: 'Agency',
-    price: '$79',
+    price: '₹899',
     period: '/month',
     description: 'For agencies and power users',
     color: 'purple',
+    icon: Crown,
     features: [
       'Unlimited builds',
       'Dedicated build runner',
@@ -72,7 +75,8 @@ export default function Pricing() {
     <div className="min-h-screen bg-dark-900 flex flex-col">
       <Navbar />
 
-      <main className="flex-1 pt-28 pb-20 px-4">
+      <main className="flex-1 pt-28 pb-20 px-4 relative overflow-hidden">
+        <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-brand-600/15 blur-3xl" />
         <div className="max-w-5xl mx-auto">
           {/* Header */}
           <div className="text-center mb-14">
@@ -84,7 +88,7 @@ export default function Pricing() {
                 <Star size={12} className="fill-brand-400" />
                 Simple, transparent pricing
               </div>
-              <h1 className="text-4xl md:text-5xl font-black text-white mb-4">
+              <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-4">
                 Choose Your Plan
               </h1>
               <p className="text-xl text-gray-400 max-w-xl mx-auto">
@@ -94,17 +98,17 @@ export default function Pricing() {
           </div>
 
           {/* Plans */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch">
             {plans.map((plan, i) => (
               <motion.div
                 key={plan.name}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }}
-                className={`relative rounded-2xl p-6 border flex flex-col ${
+                className={`relative rounded-3xl p-6 border flex flex-col transition-all duration-300 hover:-translate-y-1 ${
                   plan.popular
-                    ? 'bg-gradient-to-b from-brand-600/20 to-dark-800 border-brand-500/50 shadow-glow'
-                    : 'bg-dark-800 border-white/5'
+                    ? 'bg-gradient-to-b from-brand-600/25 via-dark-800 to-dark-800 border-brand-500/50 shadow-glow md:scale-[1.03] z-10'
+                    : 'bg-dark-800/90 border-white/10 hover:border-brand-500/30'
                 }`}
               >
                 {plan.popular && (
@@ -116,10 +120,20 @@ export default function Pricing() {
                 )}
 
                 <div className="mb-6">
-                  <h2 className="text-lg font-bold text-white mb-1">{plan.name}</h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      plan.popular ? 'bg-brand-500/20 text-brand-400' : 'bg-white/5 text-gray-400'
+                    }`}>
+                      <plan.icon size={20} />
+                    </div>
+                    {plan.popular && (
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-brand-400">Best value</span>
+                    )}
+                  </div>
+                  <h2 className="text-xl font-bold text-white mb-1">{plan.name}</h2>
                   <p className="text-sm text-gray-400 mb-4">{plan.description}</p>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-black text-white">{plan.price}</span>
+                    <span className="text-4xl font-black tracking-tight text-white">{plan.price}</span>
                     <span className="text-gray-400 text-sm">{plan.period}</span>
                   </div>
                 </div>
@@ -127,7 +141,7 @@ export default function Pricing() {
                 <ul className="space-y-2.5 flex-1 mb-6">
                   {plan.features.map(feature => (
                     <li key={feature} className="flex items-start gap-2.5 text-sm text-gray-300">
-                      <CheckCircle size={15} className="text-green-400 flex-shrink-0 mt-0.5" />
+                      <CheckCircle size={15} className={`flex-shrink-0 mt-0.5 ${plan.popular ? 'text-brand-400' : 'text-green-400'}`} />
                       {feature}
                     </li>
                   ))}
@@ -135,14 +149,20 @@ export default function Pricing() {
 
                 <Button
                   variant={plan.variant}
-                  className="w-full justify-center"
-                  onClick={() => navigate('/signup')}
+                  className="w-full justify-center pricing-cta"
+                  onClick={() => navigate(plan.name === 'Pro' ? '/payment?plan=pro' : '/signup')}
                   icon={plan.popular ? <Zap size={15} /> : undefined}
                 >
                   {plan.cta}
                 </Button>
               </motion.div>
             ))}
+          </div>
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-xs text-gray-500">
+            <span className="inline-flex items-center gap-2"><CheckCircle size={14} className="text-green-400" /> No hidden fees</span>
+            <span className="inline-flex items-center gap-2"><ShieldCheck size={14} className="text-brand-400" /> Secure UPI payments</span>
+            <span className="inline-flex items-center gap-2"><Zap size={14} className="text-yellow-400" /> Cancel anytime</span>
           </div>
 
           {/* FAQ */}

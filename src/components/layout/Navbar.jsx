@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Smartphone, Menu, X, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import Button from '../ui/Button'
+import ThemeToggle from '../ui/ThemeToggle'
 
 export default function Navbar() {
   const { isAuthenticated, signOut } = useAuth()
@@ -59,6 +60,7 @@ export default function Navbar() {
 
         {/* Desktop CTA */}
         <div className="hidden md:flex items-center gap-3">
+          <ThemeToggle />
           {isAuthenticated ? (
             <>
               <Button variant="ghost" onClick={() => navigate('/dashboard')} size="sm">
@@ -110,6 +112,7 @@ export default function Navbar() {
                 </a>
               ))}
               <div className="border-t border-white/5 pt-3 mt-1 flex flex-col gap-2">
+                <ThemeToggle />
                 {isAuthenticated ? (
                   <>
                     <Button variant="secondary" onClick={() => navigate('/dashboard')} className="w-full justify-center">

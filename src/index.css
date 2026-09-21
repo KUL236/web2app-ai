@@ -14,6 +14,7 @@
   body {
     @apply bg-dark-900 text-white antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    transition: background-color 200ms ease, color 200ms ease;
   }
 
   ::-webkit-scrollbar {
@@ -122,7 +123,93 @@
   .sidebar-link-active {
     @apply sidebar-link bg-brand-600/20 text-brand-400 border border-brand-500/20;
   }
+
+  .theme-toggle {
+    @apply relative inline-flex items-center justify-between gap-1.5 w-[76px] h-9 px-2 rounded-full
+           text-gray-400 bg-white/10 border border-white/10 transition-colors duration-200
+           focus:outline-none focus:ring-2 focus:ring-brand-500/50;
+  }
+
+  .theme-toggle-thumb {
+    @apply absolute left-[27px] w-5 h-5 rounded-full bg-dark-400 shadow-sm transition-transform duration-200;
+  }
+
+  .theme-toggle-thumb-light {
+    @apply translate-x-[22px] bg-white;
+  }
 }
+
+/* The existing component classes use the dark palette directly. These overrides
+   keep the full app in sync when the user switches to the light palette. */
+[data-theme="light"] body {
+  @apply bg-slate-50 text-slate-900;
+}
+
+[data-theme="light"] .bg-dark-900 { background-color: #f8fafc; }
+[data-theme="light"] .bg-dark-800 { background-color: #ffffff; }
+[data-theme="light"] .bg-dark-700 { background-color: #f1f5f9; }
+[data-theme="light"] .bg-dark-600 { background-color: #e2e8f0; }
+[data-theme="light"] .bg-dark-500 { background-color: #cbd5e1; }
+[data-theme="light"] .bg-dark-400 { background-color: #94a3b8; }
+[data-theme="light"] .bg-dark-700\/50 { background-color: rgba(226, 232, 240, 0.7); }
+[data-theme="light"] .text-white { color: #0f172a; }
+[data-theme="light"] .text-gray-300 { color: #475569; }
+[data-theme="light"] .text-gray-400 { color: #475569; }
+[data-theme="light"] .text-gray-500 { color: #94a3b8; }
+[data-theme="light"] .border-white\/5 { border-color: rgba(15, 23, 42, 0.08); }
+[data-theme="light"] .border-white\/10 { border-color: rgba(15, 23, 42, 0.12); }
+[data-theme="light"] .bg-white\/5 { background-color: rgba(15, 23, 42, 0.04); }
+[data-theme="light"] .bg-white\/10 { background-color: rgba(15, 23, 42, 0.08); }
+[data-theme="light"] .hover\:bg-white\/5:hover { background-color: rgba(15, 23, 42, 0.06); }
+[data-theme="light"] .hover\:bg-white\/10:hover { background-color: rgba(15, 23, 42, 0.12); }
+[data-theme="light"] .hover\:text-white:hover { color: #0f172a; }
+[data-theme="light"] .bg-gray-500\/20 { background-color: rgba(100, 116, 139, 0.16); }
+[data-theme="light"] .bg-dark-900\/80 { background-color: rgba(248, 250, 252, 0.8); }
+[data-theme="light"] .bg-dark-900\/95 { background-color: rgba(248, 250, 252, 0.95); }
+[data-theme="light"] .bg-dark-900\/98 { background-color: rgba(248, 250, 252, 0.98); }
+[data-theme="light"] .bg-dark-800\/80 { background-color: rgba(255, 255, 255, 0.8); }
+[data-theme="light"] .btn-primary,
+[data-theme="light"] .btn-primary:hover,
+[data-theme="light"] .bg-red-600,
+[data-theme="light"] .bg-red-600:hover,
+[data-theme="light"] .bg-green-600,
+[data-theme="light"] .bg-green-600:hover {
+  color: #ffffff;
+}
+[data-theme="light"] .btn-secondary {
+  color: #0f172a;
+  background-color: rgba(15, 23, 42, 0.08);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+[data-theme="light"] .btn-secondary:hover {
+  color: #0f172a;
+  background-color: rgba(15, 23, 42, 0.14);
+  border-color: rgba(15, 23, 42, 0.2);
+}
+[data-theme="light"] .btn-ghost {
+  color: #475569;
+}
+[data-theme="light"] .btn-ghost:hover {
+  color: #0f172a;
+  background-color: rgba(15, 23, 42, 0.06);
+}
+[data-theme="light"] .pricing-cta.btn-primary,
+[data-theme="light"] .pricing-cta.btn-primary:hover {
+  color: #ffffff;
+  background-color: #4f46e5;
+}
+[data-theme="light"] .pricing-cta.btn-secondary,
+[data-theme="light"] .pricing-cta.btn-secondary:hover {
+  color: #0f172a;
+  background-color: #e2e8f0;
+  border-color: #cbd5e1;
+}
+[data-theme="light"] .text-white.bg-brand-600,
+[data-theme="light"] .bg-brand-600.text-white,
+[data-theme="light"] .bg-brand-600 .text-white,
+[data-theme="light"] .bg-gradient-to-br .text-white { color: #ffffff; }
+[data-theme="light"] .theme-toggle-thumb { background-color: #475569; }
+[data-theme="light"] .theme-toggle-thumb-light { background-color: #ffffff; }
 
 @layer utilities {
   .animate-glow {

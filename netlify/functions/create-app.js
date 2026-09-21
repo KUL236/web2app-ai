@@ -7,6 +7,14 @@ const githubToken = process.env.GITHUB_TOKEN
 const githubOwner = process.env.GITHUB_OWNER
 const githubRepo = process.env.GITHUB_REPO
 const ICON_BUCKET = 'app-icons'
+const internalSecret = process.env.INTERNAL_SECRET
+
+function getCallbackUrl(event) {
+  const configuredUrl = process.env.URL
+  const requestHost = event.headers.host || event.headers.Host
+  const siteUrl = (configuredUrl || (requestHost ? `https://${requestHost}` : '')).replace(/\/+$/, '')
+  return siteUrl ? `${siteUrl}/.netlify/functions/update-build` : ''
+}
 
 let nodeWebSocket
 if (typeof WebSocket === 'undefined' && typeof process !== 'undefined' && process.versions?.node) {
@@ -100,19 +108,18 @@ async function resolveFaviconUrl(websiteUrl) {
 }
 
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
-  }
-
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Content-Type': 'application/json',
   }
 
-  // Preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' }
+  }
+
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) }
   }
 
   try {
@@ -338,8 +345,13 @@ exports.handler = async (event) => {
       client_payload: {
         buildId: build.id,
         appId: app.id,
-        callback_url:app.callback_url,
-        callback_secret:app.callback_secret,
+        appName: app.app_name,
+        packageName: app.package_name,
+        websiteUrl: app.website_url,
+        iconColor: app.icon_color,
+        iconUrl: resolvedIconUrl || '',
+        callback_url: getCallbackUrl(event),
+        callback_secret: internalSecret || '',
       },
     }
 

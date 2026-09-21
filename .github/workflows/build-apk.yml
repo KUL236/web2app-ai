@@ -19,11 +19,11 @@ jobs:
     timeout-minutes: 30
 
     env:
-      BUILD_ID: ${{ github.run_number }}
-      APP_NAME: Web2App AI
-      PACKAGE_NAME: com.kul236.webapp
-      WEBSITE_URL: https://web2appconversion.netlify.app/
-      ICON_COLOR: "#6366f1"
+      BUILD_ID: ${{ github.event.client_payload.buildId }}
+      APP_NAME: ${{ github.event.client_payload.appName }}
+      PACKAGE_NAME: ${{ github.event.client_payload.packageName }}
+      WEBSITE_URL: ${{ github.event.client_payload.websiteUrl }}
+      ICON_COLOR: ${{ github.event.client_payload.iconColor }}
 
     steps:
       # ── 1. Notify: Building ──────────────────────────────────────────────
@@ -34,7 +34,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
             -d '{
-              "build_id": "${{ github.run_number }}",
+              "build_id": "${{ github.event.client_payload.buildId }}",
               "status": "building",
               "github_run_id": "${{ github.run_id }}"
             }' || true
@@ -73,10 +73,10 @@ jobs:
       - name: Configure app placeholders
         working-directory: android-template
         env:
-          APP_NAME: Web2App AI
-          PACKAGE_NAME: com.kul236.webapp
-          WEBSITE_URL: https://web2appconversion.netlify.app/
-          ICON_COLOR: "#6366f1"
+          APP_NAME: ${{ github.event.client_payload.appName }}
+          PACKAGE_NAME: ${{ github.event.client_payload.packageName }}
+          WEBSITE_URL: ${{ github.event.client_payload.websiteUrl }}
+          ICON_COLOR: ${{ github.event.client_payload.iconColor }}
         run: |
           # Sanitize inputs
           SAFE_APP_NAME=$(echo "$APP_NAME" | sed 's/[^a-zA-Z0-9 _-]//g')
@@ -129,8 +129,8 @@ jobs:
       - name: Generate launcher icons
         working-directory: android-template
         env:
-          APP_ICON_URL: ${{ github.event.client_payload.icon_url }}
-          WEBSITE_URL: ${{ github.event.client_payload.website_url }}
+          APP_ICON_URL: ${{ github.event.client_payload.iconUrl }}
+          WEBSITE_URL: ${{ github.event.client_payload.websiteUrl }}
         run: |
           python3 -m pip install --quiet pillow
           python3 - <<'PY'
@@ -237,7 +237,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
             -d '{
-              "build_id": "${{ env.BUILD_ID }}",
+              "build_id": "${{ github.event.client_payload.buildId }}",
               "status": "signing",
               "github_run_id": "${{ github.run_id }}"
             }' || true
@@ -333,7 +333,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
             -d "{
-              \"build_id\": \"${{ env.BUILD_ID }}\",
+              \"build_id\": \"${{ github.event.client_payload.buildId }}\",
               \"status\": \"complete\",
               \"github_run_id\": \"${{ github.run_id }}\",
               \"download_url\": \"$DOWNLOAD_URL\",
@@ -348,7 +348,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Callback-Secret: ${{ github.event.client_payload.callback_secret }}" \
             -d '{
-              "build_id": "${{ env.BUILD_ID }}",
+              "build_id": "${{ github.event.client_payload.buildId }}",
               "status": "failed",
               "github_run_id": "${{ github.run_id }}",
               "error_message": "GitHub Actions build failed. Check the workflow logs for details."

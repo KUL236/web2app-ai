@@ -4,6 +4,7 @@ import { Menu, Bell } from 'lucide-react'
 import Sidebar from '../components/layout/Sidebar'
 import { useAuth } from '../context/AuthContext'
 import { getInitials } from '../lib/utils'
+import ThemeToggle from '../components/ui/ThemeToggle'
 
 export default function DashboardLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -24,6 +25,7 @@ export default function DashboardLayout({ children }) {
           </button>
           <div className="flex-1 lg:flex-none" />
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <button className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors relative">
               <Bell size={18} />
               <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-brand-500" />
