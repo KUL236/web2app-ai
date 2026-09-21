@@ -1,9 +1,6 @@
 name: Build Android APK
 
 on:
-  push:
-    branches:
-      - main
   repository_dispatch:
     types:
       - build-apk
@@ -64,6 +61,10 @@ jobs:
       # ── 5. Set Build Variables ──────────────────────────────────────────
       - name: Set Build Variables
         run: |
+          if [ -z "$BUILD_ID" ] || [ -z "$APP_NAME" ] || [ -z "$PACKAGE_NAME" ] || [ -z "$WEBSITE_URL" ]; then
+            echo "ERROR: Missing build payload. This workflow must be started by the app build dispatcher."
+            exit 1
+          fi
           echo "Build ID: ${{ env.BUILD_ID }}"
           echo "App Name: ${{ env.APP_NAME }}"
           echo "Package: ${{ env.PACKAGE_NAME }}"
